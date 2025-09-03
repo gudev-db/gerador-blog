@@ -150,12 +150,12 @@ Gere um artigo completo e pronto para publicação, seguindo TODAS as regras de 
         
         st.divider()
         
-        nome_produto = st.text_input("Nome do Produto:", "NEMATEC®")
-        principio_ativo = st.text_input("Princípio Ativo/Diferencial:", "Abamectina, com tripla ação de contato, sistêmica e promotora de crescimento radicular")
-        beneficios_produto = st.text_area("Benefícios do Produto:", "Proteção prolongada no sulco de plantio, controle dos estágios juvenis dos nematoides, estímulo ao desenvolvimento de raízes laterais")
-        espectro_acao = st.text_area("Espectro de Ação:", "Meloidogyne incognita, Heterodera glycines, Pratylenchulus brachyurus")
-        nome_empresa = st.text_input("Nome da Empresa/Marca:", "Syngenta")
-        nome_central = st.text_input("Nome da Central de Conteúdos:", "Portal Agro")
+        nome_produto = st.text_input("Nome do Produto:")
+        principio_ativo = st.text_input("Princípio Ativo/Diferencial:")
+        beneficios_produto = st.text_area("Benefícios do Produto:")
+        espectro_acao = st.text_area("Espectro de Ação:")
+        nome_empresa = st.text_input("Nome da Empresa/Marca:")
+        nome_central = st.text_input("Nome da Central de Conteúdos:")
         
         st.divider()
         
