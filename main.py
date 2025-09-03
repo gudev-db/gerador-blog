@@ -126,6 +126,15 @@ Você é um redator técnico especializado em agronegócio. Crie um artigo de bl
 - Empresa: {nome_empresa}
 - Central de Conteúdos: {nome_central}
 
+**DIRETRIZES ADICIONAIS:**
+{diretrizes_usuario}
+
+**TÉCNICAS DE SEO:**
+{tecnica_seo}
+
+**NÚMERO DE PALAVRAS:**
+{numero_palavras}
+
 **TAREFA:**
 Gere um artigo completo e pronto para publicação, seguindo TODAS as regras de estrutura, linguagem, formatação e persuasão listadas acima. O texto deve ser técnico, persuasivo e fiel ao estilo do documento exemplo.
 '''
@@ -140,6 +149,11 @@ Gere um artigo completo e pronto para publicação, seguindo TODAS as regras de 
         mes_publicacao = st.text_input("Mês de Publicação:", "08/2025")
         objetivo_post = st.text_area("Objetivo do Post:", "Explicar a importância do manejo de nematoides e apresentar soluções via tratamento de sementes")
         url = st.text_input("URL:", "/manejo-e-protecao/proteja-sua-soja-de-nematoides")
+        
+        # Novos campos adicionados
+        diretrizes_usuario = st.text_area("Diretrizes Adicionais do Usuário:", "Incluir dicas práticas para implementação no campo. Manter linguagem acessível mas técnica.")
+        tecnica_seo = st.text_area("Técnica de SEO:", "Usar palavras-chave: manejo de nematoides, tratamento de sementes, proteção da soja. Incluir meta descrição. Otimizar para buscas orgânicas.")
+        numero_palavras = st.selectbox("Número de Palavras:", [500, 800, 1000, 1200, 1500, 2000], index=2)
         
         st.divider()
         
@@ -185,7 +199,10 @@ Gere um artigo completo e pronto para publicação, seguindo TODAS as regras de 
                     beneficios_produto=beneficios_produto,
                     espectro_acao=espectro_acao,
                     nome_empresa=nome_empresa,
-                    nome_central=nome_central
+                    nome_central=nome_central,
+                    diretrizes_usuario=diretrizes_usuario,
+                    tecnica_seo=tecnica_seo,
+                    numero_palavras=numero_palavras
                 )
                 
                 # Gerar conteúdo com Gemini
@@ -208,6 +225,7 @@ Gere um artigo completo e pronto para publicação, seguindo TODAS as regras de 
                     st.info(f"**Editoria:** {editoria}")
                     st.info(f"**Mês de Publicação:** {mes_publicacao}")
                     st.info(f"**URL:** {url}")
+                    st.info(f"**Número de Palavras:** {numero_palavras}")
                     
                     # Botão para copiar texto
                     st.download_button(
@@ -222,6 +240,9 @@ Gere um artigo completo e pronto para publicação, seguindo TODAS as regras de 
                     st.success(f"**Produto:** {nome_produto}")
                     st.success(f"**Princípio Ativo:** {principio_ativo}")
                     st.success(f"**Empresa:** {nome_empresa}")
+                    st.subheader("🔍 SEO e Diretrizes")
+                    st.success(f"**Técnica SEO:** {tecnica_seo}")
+                    st.success(f"**Diretrizes:** {diretrizes_usuario}")
                 
                 st.divider()
                 
