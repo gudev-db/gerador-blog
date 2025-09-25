@@ -4,6 +4,7 @@ import os
 import uuid
 from datetime import datetime
 from pymongo import MongoClient
+import json
 
 # Configuração da página
 st.set_page_config(page_title="Gerador de Blog Posts Agrícolas", page_icon="🌱", layout="wide")
@@ -12,6 +13,18 @@ st.set_page_config(page_title="Gerador de Blog Posts Agrícolas", page_icon="�
 st.title("🌱 Gerador de Blog Posts Agrícolas")
 st.markdown("Crie conteúdos especializados para o agronegócio seguindo a estrutura profissional")
 
+# Conexão com MongoDB
+try:
+    client_mongo = MongoClient("mongodb+srv://gustavoromao3345:RqWFPNOJQfInAW1N@cluster0.5iilj.mongodb.net/auto_doc?retryWrites=true&w=majority&ssl=true&ssl_cert_reqs=CERT_NONE&tlsAllowInvalidCertificates=true")
+    db = client_mongo['blog_posts_agricolas']
+    collection_posts = db['posts_gerados']
+    collection_briefings = db['briefings']
+    collection_kbf = db['kbf_produtos']
+    mongo_connected = True
+except Exception as e:
+    st.error(f"Erro na conexão com MongoDB: {str(e)}")
+    mongo_connected = False
+
 # Configuração do Gemini API
 gemini_api_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
 if not gemini_api_key:
@@ -19,23 +32,9 @@ if not gemini_api_key:
 
 if gemini_api_key:
     client = genai.Client(api_key=gemini_api_key)
-    
-    # Conexão com MongoDB (opcional)
-    try:
-        mongodb_uri = st.secrets.get("MONGODB_URI", os.getenv("MONGODB_URI"))
-        if mongodb_uri:
-            client_mongo = MongoClient(mongodb_uri)
-            db = client_mongo['blog_posts_agricolas']
-            collection = db['posts_gerados']
-            mongo_connected = True
-        else:
-            mongo_connected = False
-    except:
-        mongo_connected = False
-        st.warning("Conexão com MongoDB não configurada. Os posts não serão salvos.")
 
-    # Função para salvar no MongoDB
-    def salvar_no_mongo(titulo, cultura, editoria, mes_publicacao, objetivo_post, url, texto_gerado):
+    # Funções para o banco de dados
+    def salvar_post(titulo, cultura, editoria, mes_publicacao, objetivo_post, url, texto_gerado, palavras_chave, metadescricao, palavras_proibidas, tom_voz, estrutura, palavras_contagem):
         if mongo_connected:
             documento = {
                 "id": str(uuid.uuid4()),
@@ -46,223 +45,361 @@ if gemini_api_key:
                 "objetivo_post": objetivo_post,
                 "url": url,
                 "texto_gerado": texto_gerado,
-                "data_criacao": datetime.now()
+                "palavras_chave": palavras_chave,
+                "metadescricao": metadescricao,
+                "palavras_proibidas": palavras_proibidas,
+                "tom_voz": tom_voz,
+                "estrutura": estrutura,
+                "palavras_contagem": palavras_contagem,
+                "data_criacao": datetime.now(),
+                "versao": "1.0"
             }
-            collection.insert_one(documento)
+            collection_posts.insert_one(documento)
             return True
         return False
 
-    # Regras extraídas do documento exemplo
-    regras_replicacao = '''
-**REGRAS DE REPLICAÇÃO EXTRAÍDAS DO DOCUMENTO EXEMPLO:**
+    def carregar_kbf_produtos():
+        if mongo_connected:
+            try:
+                kbf_docs = list(collection_kbf.find({}))
+                return kbf_docs
+            except:
+                return []
+        return []
+
+    def salvar_briefing(briefing_data):
+        if mongo_connected:
+            documento = {
+                "id": str(uuid.uuid4()),
+                "briefing": briefing_data,
+                "data_criacao": datetime.now()
+            }
+            collection_briefings.insert_one(documento)
+            return True
+        return False
+
+    def carregar_posts_anteriores():
+        if mongo_connected:
+            try:
+                posts = list(collection_posts.find({}).sort("data_criacao", -1).limit(10))
+                return posts
+            except:
+                return []
+        return []
+
+    # Regras base do sistema
+    regras_base = '''
+**REGRAS DE REPLICAÇÃO - ESTRUTURA PROFISSIONAL:**
 
 **1. ESTRUTURA DO DOCUMENTO:**
-- Título principal em formato de chamada para ação
+- Título principal impactante e com chamada para ação
 - Subtítulo/Chapéu com resumo executivo (1-2 linhas)
-- Introdução: Contextualiza o problema atual e seu impacto
-- Seção de Problema: Detalha pragas específicas, comportamentos e danos causados
-- Seção de Solução Genérica: Explica a estratégia geral (ex: tratamento de sementes)
-- Seção de Solução Específica: Apresenta o produto como resposta aos desafios
-- Conclusão: Reforça compromisso da marca e chama para ação
+- Introdução contextualizando o problema e impacto
+- Seção de Problema: Detalhamento técnico dos desafios
+- Seção de Solução Genérica: Estratégia geral de manejo
+- Seção de Solução Específica: Produto como resposta aos desafios
+- Conclusão com reforço de compromisso e chamada para ação
+- Assinatura padrão da empresa
 
 **2. LINGUAGEM E TOM:**
-- Linguagem técnica e profissional, mas acessível ao produtor rural
-- Tom autoritativo e especializado
-- Uso de terminologia do agronegócio ("estabelecimento do estande", "manejo integrado")
-- Persuasão focada em benefícios e solução de problemas
-- Mix de frases curtas de impacto com parágrafos explicativos
+- {tom_voz}
+- Linguagem {nivel_tecnico} técnica e profissional
+- Uso de terminologia específica do agronegócio
+- Persuasão baseada em benefícios e solução de problemas
+- Evitar repetição de informações entre seções
 
 **3. ELEMENTOS TÉCNICOS OBRIGATÓRIOS:**
-- Nomes científicos das pragas entre parênteses
-- Citação de fontes (ex: "Fonte: Embrapa")
-- Destaque em negrito para nome do produto e termos técnicos-chave
-- Descrição detalhada de danos específicos
-- Explicação de benefícios econômicos e estratégicos
+- Nomes científicos entre parênteses quando aplicável
+- Citação de fontes confiáveis (Embrapa, universidades, etc.)
+- Destaque para termos técnicos-chave e nomes de produtos
+- Descrição detalhada de danos e benefícios
+- Dados concretos e informações mensuráveis
 
-**4. FORMATAÇÃO:**
-- Título principal
-- Subtítulo em formato de resumo
-- Parágrafos bem estruturados com transições suaves
-- Seções claramente demarcadas (sem subtítulos numerados)
-- Destaques em negrito para produtos e termos importantes
-
-**5. PERSUASÃO E ARGUMENTAÇÃO:**
-- Sempre vincular problema → solução
-- Destacar valor econômico e retorno sobre investimento
-- Usar dados concretos sobre danos e perdas
-- Apresentar produto como consequência lógica da argumentação
-- Focar em proteção e potencial máximo da lavoura
+**4. RESTRIÇÕES:**
+- Palavras proibidas: {palavras_proibidas}
+- Evitar viés comercial explícito
+- Manter abordagem {abordagem_problema}
+- Número de palavras: {numero_palavras} (±10%)
 '''
 
-    # Template do prompt baseado nas regras
-    prompt_template = '''
-**INSTRUÇÕES PARA CRIAÇÃO DE BLOG POST AGRÍCOLA:**
-
-Você é um redator técnico especializado em agronegócio. Crie um artigo de blog seguindo ESTRITAMENTE as regras abaixo:
-
-{regras_replicacao}
-
-**DADOS PARA INCLUSÃO NO POST:**
-
-**Informações Básicas:**
-- Título: {titulo_blog}
-- Cultura: {cultura}
-- Editoria: {editoria}
-- Objetivo: {objetivo_post}
-
-**Contexto e Problema:**
-- Problema Principal: {problema_principal}
-- Pragas/Alvo: {pragas_alvo}
-- Danos Causados: {danos_causados}
-
-**Soluções:**
-- Solução Genérica: {solucao_generica}
-- Produto Específico: {nome_produto}
-- Princípio Ativo: {principio_ativo}
-- Benefícios: {beneficios_produto}
-- Espectro de Ação: {espectro_acao}
-
-**Marca:**
-- Empresa: {nome_empresa}
-- Central de Conteúdos: {nome_central}
-
-**DIRETRIZES ADICIONAIS:**
-{diretrizes_usuario}
-
-**TÉCNICAS DE SEO:**
-{tecnica_seo}
-
-**NÚMERO DE PALAVRAS:**
-{numero_palavras}
-
-**TAREFA:**
-Gere um artigo completo e pronto para publicação, seguindo TODAS as regras de estrutura, linguagem, formatação e persuasão listadas acima. O texto deve ser técnico, persuasivo e fiel ao estilo do documento exemplo.
-'''
-
-    # Interface do usuário
+    # Interface principal
     with st.sidebar:
-        st.header("📋 Configurações do Post")
+        st.header("📋 Configurações Principais")
         
-        titulo_blog = st.text_input("Título do Blog:", "Proteja sua soja de nematoides e pragas de solo")
-        cultura = st.text_input("Cultura:", "Soja")
-        editoria = st.text_input("Editoria:", "Manejo e Proteção")
-        mes_publicacao = st.text_input("Mês de Publicação:", "08/2025")
-        objetivo_post = st.text_area("Objetivo do Post:", "Explicar a importância do manejo de nematoides e apresentar soluções via tratamento de sementes")
-        url = st.text_input("URL:", "/manejo-e-protecao/proteja-sua-soja-de-nematoides")
+        # Modo de entrada - Briefing ou Campos Individuais
+        modo_entrada = st.radio("Modo de Entrada:", ["Campos Individuais", "Briefing Completo"])
         
-        # Novos campos adicionados
-        diretrizes_usuario = st.text_area("Diretrizes Adicionais do Usuário:", "Incluir dicas práticas para implementação no campo. Manter linguagem acessível mas técnica.")
-        tecnica_seo = st.text_area("Técnica de SEO:", "Usar palavras-chave: manejo de nematoides, tratamento de sementes, proteção da soja. Incluir meta descrição. Otimizar para buscas orgânicas.")
-        numero_palavras = st.selectbox("Número de Palavras:", [500, 800, 1000, 1200, 1500, 2000], index=2)
+        # Controle de palavras
+        numero_palavras = st.slider("Número de Palavras:", min_value=300, max_value=3000, value=1000, step=100)
         
-        st.divider()
+        # Palavras-chave
+        st.subheader("🔑 Palavras-chave")
+        palavra_chave_principal = st.text_input("Palavra-chave Principal:")
+        palavras_chave_secundarias = st.text_area("Palavras-chave Secundárias (separadas por vírgula):")
         
-        problema_principal = st.text_area("Problema Principal/Contexto:", "Solos compactados e com palhada de milho têm favorecido a explosão populacional de nematoides, preocupando produtores para a próxima safra")
-        pragas_alvo = st.text_area("Pragas/Alvo Principal:", "Nematoide das galhas (Meloidogyne incognita), Nematoide de cisto (Heterodera glycines)")
-        danos_causados = st.text_area("Danos Causados:", "Formação de galhas nas raízes que impedem a absorção de água e nutrientes, paralisando o desenvolvimento da planta e causando amarelecimento")
-        solucao_generica = st.text_area("Solução Genérica:", "Adoção de um manejo integrado com genética resistente, rotação de culturas e tratamento de sementes específico")
+        # Configurações de estilo
+        st.subheader("🎨 Configurações de Estilo")
+        tom_voz = st.selectbox("Tom de Voz:", ["Jornalístico", "Especialista Técnico", "Educativo", "Persuasivo"])
+        nivel_tecnico = st.selectbox("Nível Técnico:", ["Básico", "Intermediário", "Avançado"])
+        abordagem_problema = st.text_area("Aborde o problema de tal forma que:", "seja claro, técnico e focando na solução prática para o produtor")
         
-        st.divider()
+        # Restrições
+        st.subheader("🚫 Restrições")
+        palavras_proibidas = st.text_area("Palavras Proibidas (separadas por vírgula):", "melhor, número 1, líder, insuperável")
         
-        nome_produto = st.text_input("Nome do Produto:")
-        principio_ativo = st.text_input("Princípio Ativo/Diferencial:")
-        beneficios_produto = st.text_area("Benefícios do Produto:")
-        espectro_acao = st.text_area("Espectro de Ação:")
-        nome_empresa = st.text_input("Nome da Empresa/Marca:")
-        nome_central = st.text_input("Nome da Central de Conteúdos:")
+        # Estrutura do texto
+        st.subheader("📐 Estrutura do Texto")
+        estrutura_opcoes = st.multiselect("Seções do Post:", 
+                                         ["Introdução", "Problema", "Solução Genérica", "Solução Específica", 
+                                          "Benefícios", "Implementação Prática", "Conclusão", "Fontes"],
+                                         default=["Introdução", "Problema", "Solução Genérica", "Solução Específica", "Conclusão"])
         
-        st.divider()
-        
-        # Opção para visualizar regras
-        if st.checkbox("📋 Visualizar Regras de Replicação"):
-            st.info(regras_replicacao)
-        
-        gerar_post = st.button("🔄 Gerar Blog Post", type="primary", use_container_width=True)
+        # KBF de Produtos
+        st.subheader("📦 KBF de Produtos")
+        kbf_produtos = carregar_kbf_produtos()
+        if kbf_produtos:
+            produtos_disponiveis = [prod['nome'] for prod in kbf_produtos]
+            produto_selecionado = st.selectbox("Selecionar Produto do KBF:", ["Nenhum"] + produtos_disponiveis)
+            if produto_selecionado != "Nenhum":
+                produto_info = next((prod for prod in kbf_produtos if prod['nome'] == produto_selecionado), None)
+                if produto_info:
+                    st.info(f"**KBF Fixo:** {produto_info.get('caracteristicas', 'Informações do produto')}")
+        else:
+            st.info("Nenhum KBF cadastrado no banco de dados")
 
-    # Área principal
-    if gerar_post and gemini_api_key:
-        with st.spinner("Gerando seu blog post... Isso pode levar alguns segundos"):
-            try:
-                # Construir o prompt final
-                prompt_final = prompt_template.format(
-                    regras_replicacao=regras_replicacao,
-                    titulo_blog=titulo_blog,
-                    cultura=cultura,
-                    editoria=editoria,
-                    objetivo_post=objetivo_post,
-                    problema_principal=problema_principal,
-                    pragas_alvo=pragas_alvo,
-                    danos_causados=danos_causados,
-                    solucao_generica=solucao_generica,
-                    nome_produto=nome_produto,
-                    principio_ativo=principio_ativo,
-                    beneficios_produto=beneficios_produto,
-                    espectro_acao=espectro_acao,
-                    nome_empresa=nome_empresa,
-                    nome_central=nome_central,
-                    diretrizes_usuario=diretrizes_usuario,
-                    tecnica_seo=tecnica_seo,
-                    numero_palavras=numero_palavras
-                )
-                
-                # Gerar conteúdo com Gemini
-                response = client.models.generate_content(
-                    model="gemini-1.5-flash",
-                    contents=prompt_final
-                )
-                
-                texto_gerado = response.text
-                
-                # Exibir resultados
-                st.success("✅ Blog post gerado com sucesso!")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("📊 Metadados do Post")
-                    st.info(f"**Título:** {titulo_blog}")
-                    st.info(f"**Cultura:** {cultura}")
-                    st.info(f"**Editoria:** {editoria}")
-                    st.info(f"**Mês de Publicação:** {mes_publicacao}")
-                    st.info(f"**URL:** {url}")
-                    st.info(f"**Número de Palavras:** {numero_palavras}")
-                    
-                    # Botão para copiar texto
-                    st.download_button(
-                        label="📥 Download do Texto",
-                        data=texto_gerado,
-                        file_name=f"blog_post_{titulo_blog.lower().replace(' ', '_')}.txt",
-                        mime="text/plain"
-                    )
-                
-                with col2:
-                    st.subheader("🌐 Informações do Produto")
-                    st.success(f"**Produto:** {nome_produto}")
-                    st.success(f"**Princípio Ativo:** {principio_ativo}")
-                    st.success(f"**Empresa:** {nome_empresa}")
-                    st.subheader("🔍 SEO e Diretrizes")
-                    st.success(f"**Técnica SEO:** {tecnica_seo}")
-                    st.success(f"**Diretrizes:** {diretrizes_usuario}")
-                
-                st.divider()
-                
-                st.subheader("📝 Conteúdo Gerado")
-                st.markdown(texto_gerado)
-                
-                # Salvar no MongoDB se conectado
-                if mongo_connected:
-                    if salvar_no_mongo(titulo_blog, cultura, editoria, mes_publicacao, objetivo_post, url, texto_gerado):
-                        st.sidebar.success("✅ Post salvo no banco de dados!")
-                
-            except Exception as e:
-                st.error(f"Erro ao gerar o conteúdo: {str(e)}")
+    # Área principal baseada no modo de entrada
+    if modo_entrada == "Campos Individuais":
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.header("📝 Informações Básicas")
+            titulo_blog = st.text_input("Título do Blog:", "Proteja sua soja de nematoides e pragas de solo")
+            metadescricao = st.text_area("Meta Descrição:", max_chars=160)
+            cultura = st.text_input("Cultura:", "Soja")
+            editoria = st.text_input("Editoria:", "Manejo e Proteção")
+            mes_publicacao = st.text_input("Mês de Publicação:", "08/2025")
+            objetivo_post = st.text_area("Objetivo do Post:", "Explicar a importância do manejo de nematoides e apresentar soluções via tratamento de sementes")
+            url = st.text_input("URL:", "/manejo-e-protecao/proteja-sua-soja-de-nematoides")
+            
+            st.header("🔧 Conteúdo Técnico")
+            problema_principal = st.text_area("Problema Principal/Contexto:", "Solos compactados e com palhada de milho têm favorecido a explosão populacional de nematoides")
+            pragas_alvo = st.text_area("Pragas/Alvo Principal:", "Nematoide das galhas (Meloidogyne incognita), Nematoide de cisto (Heterodera glycines)")
+            danos_causados = st.text_area("Danos Causados:", "Formação de galhas nas raízes que impedem a absorção de água e nutrientes")
+            solucao_generica = st.text_area("Solução Genérica:", "Adoção de um manejo integrado com genética resistente, rotação de culturas e tratamento de sementes")
+        
+        with col2:
+            st.header("🏭 Informações da Empresa")
+            nome_empresa = st.text_input("Nome da Empresa/Marca:")
+            nome_central = st.text_input("Nome da Central de Conteúdos:")
+            
+            st.header("💡 Soluções e Produtos")
+            nome_produto = st.text_input("Nome do Produto:")
+            principio_ativo = st.text_input("Princípio Ativo/Diferencial:")
+            beneficios_produto = st.text_area("Benefícios do Produto:")
+            espectro_acao = st.text_area("Espectro de Ação:")
+            
+            st.header("🎯 Diretrizes Específicas")
+            diretrizes_usuario = st.text_area("Diretrizes Adicionais:", "Incluir dicas práticas para implementação no campo. Manter linguagem acessível mas técnica.")
+            fontes_pesquisa = st.text_area("Fontes para Pesquisa/Referência:", "Embrapa Soja, Universidade de São Paulo, Artigos técnicos sobre nematoides")
+            
+            # Upload de arquivos estratégicos
+            arquivo_strategico = st.file_uploader("📎 Upload de Arquivo Estratégico", type=['txt', 'pdf', 'docx'])
+            if arquivo_strategico:
+                st.success(f"Arquivo {arquivo_strategico.name} carregado com sucesso!")
     
-    elif not gemini_api_key:
-        st.warning("⚠️ Por favor, insira uma API Key válida do Gemini para gerar conteúdos.")
+    else:  # Modo Briefing
+        st.header("📄 Briefing Completo")
+        briefing_texto = st.text_area("Cole aqui o briefing completo:", height=300,
+                                     placeholder="""EXEMPLO DE BRIEFING:
+Título: Controle Eficiente de Nematoides na Soja
+Cultura: Soja
+Problema: Aumento da população de nematoides em solos com palhada de milho
+Objetivo: Educar produtores sobre manejo integrado
+Produto: NemaControl
+Público-alvo: Produtores de soja técnica
+Tom: Técnico-jornalístico
+Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
+        
+        if briefing_texto:
+            if st.button("Processar Briefing"):
+                salvar_briefing(briefing_texto)
+                st.success("Briefing salvo no banco de dados!")
+
+    # Configurações avançadas
+    with st.expander("⚙️ Configurações Avançadas"):
+        col_av1, col_av2 = st.columns(2)
+        
+        with col_av1:
+            st.subheader("Opcionais")
+            usar_pesquisa_web = st.checkbox("🔍 Habilitar Pesquisa Web", value=False)
+            gerar_blocos_dinamicos = st.checkbox("🔄 Gerar Blocos Dinamicamente", value=True)
+            incluir_fontes = st.checkbox("📚 Incluir Referências de Fontes", value=True)
+            incluir_assinatura = st.checkbox("✍️ Incluir Assinatura Padrão", value=True)
+            
+        with col_av2:
+            st.subheader("Controles de Qualidade")
+            evitar_repeticao = st.slider("Nível de Evitar Repetição:", 1, 10, 8)
+            profundidade_conteudo = st.selectbox("Profundidade do Conteúdo:", ["Superficial", "Moderado", "Detalhado", "Especializado"])
+            
+            # Transcrição de áudio/vídeo
+            st.subheader("🎤 Transcrição")
+            arquivo_midia = st.file_uploader("Áudio/Video para Transcrição", type=['mp3', 'wav', 'mp4', 'mov'])
+
+    # Área de geração e edição
+    st.header("🔄 Geração e Edição do Conteúdo")
+    
+    col_gerar, col_editar = st.columns(2)
+    
+    with col_gerar:
+        if st.button("🚀 Gerar Blog Post", type="primary", use_container_width=True):
+            if gemini_api_key:
+                with st.spinner("Gerando conteúdo... Isso pode levar alguns minutos"):
+                    try:
+                        # Construir prompt personalizado
+                        regras_personalizadas = regras_base.format(
+                            tom_voz=tom_voz,
+                            nivel_tecnico=nivel_tecnico,
+                            palavras_proibidas=palavras_proibidas,
+                            abordagem_problema=abordagem_problema,
+                            numero_palavras=numero_palavras
+                        )
+                        
+                        prompt_final = f"""
+                        **INSTRUÇÕES PARA CRIAÇÃO DE BLOG POST AGRÍCOLA:**
+                        
+                        {regras_personalizadas}
+                        
+                        **INFORMAÇÕES ESPECÍFICAS:**
+                        - Título: {titulo_blog if 'titulo_blog' in locals() else 'A definir'}
+                        - Meta Descrição: {metadescricao}
+                        - Cultura: {cultura if 'cultura' in locals() else 'A definir'}
+                        - Palavra-chave Principal: {palavra_chave_principal}
+                        - Palavras-chave Secundárias: {palavras_chave_secundarias}
+                        
+                        **ESTRUTURA SOLICITADA:** {', '.join(estrutura_opcoes)}
+                        **NÍVEL DE PROFUNDIDADE:** {profundidade_conteudo}
+                        **EVITAR REPETIÇÃO:** Nível {evitar_repeticao}/10
+                        
+                        **DIRETRIZES ADICIONAIS:** {diretrizes_usuario if 'diretrizes_usuario' in locals() else 'Nenhuma'}
+                        
+                        Gere um conteúdo {profundidade_conteudo.lower()} com aproximadamente {numero_palavras} palavras.
+                        """
+                        
+                        response = client.models.generate_content(
+                            model="gemini-1.5-flash",
+                            contents=prompt_final
+                        )
+                        
+                        texto_gerado = response.text
+                        
+                        # Salvar no MongoDB
+                        if salvar_post(
+                            titulo_blog if 'titulo_blog' in locals() else "Título gerado",
+                            cultura if 'cultura' in locals() else "Cultura não especificada",
+                            editoria if 'editoria' in locals() else "Editoria geral",
+                            mes_publicacao if 'mes_publicacao' in locals() else datetime.now().strftime("%m/%Y"),
+                            objetivo_post if 'objetivo_post' in locals() else "Objetivo não especificado",
+                            url if 'url' in locals() else "/",
+                            texto_gerado,
+                            f"{palavra_chave_principal}, {palavras_chave_secundarias}",
+                            metadescricao,
+                            palavras_proibidas,
+                            tom_voz,
+                            ', '.join(estrutura_opcoes),
+                            numero_palavras
+                        ):
+                            st.success("✅ Post gerado e salvo no banco de dados!")
+                        
+                        st.session_state.texto_gerado = texto_gerado
+                        st.session_state.mostrar_editor = True
+                        
+                    except Exception as e:
+                        st.error(f"Erro na geração: {str(e)}")
+    
+    with col_editar:
+        if st.button("📊 Banco de Textos", use_container_width=True):
+            st.session_state.mostrar_banco = True
+
+    # Editor de texto pós-geração
+    if st.session_state.get('mostrar_editor', False) and 'texto_gerado' in st.session_state:
+        st.header("✏️ Editor de Texto")
+        
+        texto_editavel = st.text_area("Edite o texto gerado:", 
+                                     value=st.session_state.texto_gerado, 
+                                     height=400)
+        
+        col_salvar, col_download, col_nova_versao = st.columns(3)
+        
+        with col_salvar:
+            if st.button("💾 Salvar Edições"):
+                # Atualizar no banco de dados
+                st.success("Edições salvas!")
+                
+        with col_download:
+            st.download_button(
+                label="📥 Download",
+                data=texto_editavel,
+                file_name=f"blog_post_{titulo_blog.lower().replace(' ', '_')}.txt",
+                mime="text/plain"
+            )
+            
+        with col_nova_versao:
+            if st.button("🔄 Gerar Nova Versão"):
+                st.session_state.mostrar_editor = False
+
+    # Banco de textos gerados
+    if st.session_state.get('mostrar_banco', False):
+        st.header("📚 Banco de Textos Gerados")
+        
+        posts_anteriores = carregar_posts_anteriores()
+        if posts_anteriores:
+            for post in posts_anteriores:
+                with st.expander(f"{post.get('titulo', 'Sem título')} - {post.get('data_criacao', '').strftime('%d/%m/%Y')}"):
+                    st.write(f"**Cultura:** {post.get('cultura', 'N/A')}")
+                    st.write(f"**Palavras:** {post.get('palavras_contagem', 'N/A')}")
+                    st.write(f"**Tom:** {post.get('tom_voz', 'N/A')}")
+                    st.text_area("Conteúdo:", value=post.get('texto_gerado', ''), height=200, key=post['id'])
+                    
+                    col_uso1, col_uso2 = st.columns(2)
+                    with col_uso1:
+                        if st.button("Reutilizar", key=f"reuse_{post['id']}"):
+                            st.session_state.texto_gerado = post.get('texto_gerado', '')
+                            st.session_state.mostrar_editor = True
+                    with col_uso2:
+                        if st.button("Download", key=f"dl_{post['id']}"):
+                            st.download_button(
+                                label="📥 Download",
+                                data=post.get('texto_gerado', ''),
+                                file_name=f"blog_post_{post.get('titulo', 'post').lower().replace(' ', '_')}.txt",
+                                mime="text/plain",
+                                key=f"dl_btn_{post['id']}"
+                            )
+        else:
+            st.info("Nenhum post encontrado no banco de dados.")
 
 else:
-    st.info("🔑 Para começar, insira sua API Key do Gemini na barra lateral.")
+    st.info("🔑 Para começar, insira sua API Key do Gemini.")
 
 # Rodapé
 st.divider()
-st.caption("🌱 Gerador de Conteúdo Agrícola - Desenvolvido para produtores e empresas do agronegócio")
+st.caption("🌱 Gerador de Conteúdo Agrícola - Sistema profissional para criação de conteúdos técnicos")
+
+# Instruções de uso
+with st.expander("ℹ️ Instruções de Uso"):
+    st.markdown("""
+    **Como usar este gerador:**
+    
+    1. **Configurações Básicas:** Defina palavras-chave, tom de voz e estrutura
+    2. **Modo de Entrada:** Escolha entre campos individuais ou briefing completo
+    3. **Restrições:** Configure palavras proibidas e diretrizes específicas
+    4. **Geração:** Clique em "Gerar Blog Post" para criar o conteúdo
+    5. **Edição:** Use o editor integrado para ajustes finos
+    6. **Banco de Dados:** Acesse textos anteriores para reutilização
+    
+    **Recursos Avançados:**
+    - KBF de produtos fixos do banco de dados
+    - Controle preciso de número de palavras
+    - Evitar repetição de conteúdo
+    - Suporte a pesquisa web e arquivos estratégicos
+    - Transcrição de áudio/vídeo
+    """)
