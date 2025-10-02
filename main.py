@@ -34,7 +34,7 @@ if gemini_api_key:
     client = genai.Client(api_key=gemini_api_key)
 
     # Funções para o banco de dados
-    def salvar_post(titulo, cultura, editoria, mes_publicacao, objetivo_post, url, texto_gerado, palavras_chave, metadescricao, palavras_proibidas, tom_voz, estrutura, palavras_contagem):
+    def salvar_post(titulo, cultura, editoria, mes_publicacao, objetivo_post, url, texto_gerado, palavras_chave,  palavras_proibidas, tom_voz, estrutura, palavras_contagem):
         if mongo_connected:
             documento = {
                 "id": str(uuid.uuid4()),
@@ -46,7 +46,6 @@ if gemini_api_key:
                 "url": url,
                 "texto_gerado": texto_gerado,
                 "palavras_chave": palavras_chave,
-                "metadescricao": metadescricao,
                 "palavras_proibidas": palavras_proibidas,
                 "tom_voz": tom_voz,
                 "estrutura": estrutura,
@@ -174,7 +173,6 @@ if gemini_api_key:
         with col1:
             st.header("📝 Informações Básicas")
             titulo_blog = st.text_input("Título do Blog:", "Proteja sua soja de nematoides e pragas de solo")
-            metadescricao = st.text_area("Meta Descrição:", max_chars=160)
             cultura = st.text_input("Cultura:", "Soja")
             editoria = st.text_input("Editoria:", "Manejo e Proteção")
             mes_publicacao = st.text_input("Mês de Publicação:", "08/2025")
@@ -271,7 +269,6 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
                         
                         **INFORMAÇÕES ESPECÍFICAS:**
                         - Título: {titulo_blog if 'titulo_blog' in locals() else 'A definir'}
-                        - Meta Descrição: {metadescricao}
                         - Cultura: {cultura if 'cultura' in locals() else 'A definir'}
                         - Palavra-chave Principal: {palavra_chave_principal}
                         - Palavras-chave Secundárias: {palavras_chave_secundarias}
@@ -302,7 +299,6 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
                             url if 'url' in locals() else "/",
                             texto_gerado,
                             f"{palavra_chave_principal}, {palavras_chave_secundarias}",
-                            metadescricao,
                             palavras_proibidas,
                             tom_voz,
                             ', '.join(estrutura_opcoes),
