@@ -324,20 +324,14 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
                                      value=st.session_state.texto_gerado, 
                                      height=400)
         
-        col_salvar, col_download, col_nova_versao = st.columns(3)
+        col_salvar,  col_nova_versao = st.columns(3)
         
         with col_salvar:
             if st.button("💾 Salvar Edições"):
                 # Atualizar no banco de dados
                 st.success("Edições salvas!")
                 
-        with col_download:
-            st.download_button(
-                label="📥 Download",
-                data=texto_editavel,
-                file_name=f"blog_post_{titulo_blog.lower().replace(' ', '_')}.txt",
-                mime="text/plain"
-            )
+        
             
         with col_nova_versao:
             if st.button("🔄 Gerar Nova Versão"):
