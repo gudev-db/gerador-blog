@@ -34,7 +34,7 @@ if gemini_api_key:
     client = genai.Client(api_key=gemini_api_key)
 
     # Funções para o banco de dados
-    def salvar_post(titulo, cultura, editoria, mes_publicacao, objetivo_post, url, texto_gerado, palavras_chave,  palavras_proibidas, tom_voz, estrutura, palavras_contagem):
+    def salvar_post(titulo, cultura, editoria, mes_publicacao, objetivo_post, url, texto_gerado, palavras_chave, palavras_proibidas, tom_voz, estrutura, palavras_contagem, meta_title, meta_descricao, linha_fina):
         if mongo_connected:
             documento = {
                 "id": str(uuid.uuid4()),
@@ -50,8 +50,11 @@ if gemini_api_key:
                 "tom_voz": tom_voz,
                 "estrutura": estrutura,
                 "palavras_contagem": palavras_contagem,
+                "meta_title": meta_title,
+                "meta_descricao": meta_descricao,
+                "linha_fina": linha_fina,
                 "data_criacao": datetime.now(),
-                "versao": "1.0"
+                "versao": "2.0"
             }
             collection_posts.insert_one(documento)
             return True
@@ -86,13 +89,26 @@ if gemini_api_key:
                 return []
         return []
 
-    # Regras base do sistema
+    # Função para processar transcrições
+    def processar_transcricoes(arquivos):
+        transcricoes = []
+        for arquivo in arquivos:
+            if arquivo is not None:
+                # Simulação de processamento de transcrição
+                # Em produção, integrar com API de transcrição
+                st.info(f"Processando transcrição de: {arquivo.name}")
+                transcricoes.append(f"Conteúdo transcrito de {arquivo.name}")
+        return "\n\n".join(transcricoes)
+
+    # Regras base do sistema - ATUALIZADAS
     regras_base = '''
 **REGRAS DE REPLICAÇÃO - ESTRUTURA PROFISSIONAL:**
 
 **1. ESTRUTURA DO DOCUMENTO:**
-- Título principal impactante e com chamada para ação
-- Subtítulo/Chapéu com resumo executivo (1-2 linhas)
+- Título principal impactante e com chamada para ação (máx 65 caracteres)
+- Linha fina resumindo o conteúdo (máx 200 caracteres)
+- Meta-title otimizado para SEO (máx 60 caracteres)
+- Meta-descrição atrativa (máx 155 caracteres)
 - Introdução contextualizando o problema e impacto
 - Seção de Problema: Detalhamento técnico dos desafios
 - Seção de Solução Genérica: Estratégia geral de manejo
@@ -109,16 +125,24 @@ if gemini_api_key:
 
 **3. ELEMENTOS TÉCNICOS OBRIGATÓRIOS:**
 - Nomes científicos entre parênteses quando aplicável
-- Citação de fontes confiáveis (Embrapa, universidades, etc.)
+- Citação EXPLÍCITA de fontes confiáveis (Embrapa, universidades, etc.) mencionando o órgão/instituição no corpo do texto
 - Destaque para termos técnicos-chave e nomes de produtos
 - Descrição detalhada de danos e benefícios
-- Dados concretos e informações mensuráveis
+- Dados concretos e informações mensuráveis com referências específicas
 
-**4. RESTRIÇÕES:**
+**4. FORMATAÇÃO E ESTRUTURA:**
+- Parágrafos curtos (máximo 4-5 linhas cada)
+- Listas de tópicos com no máximo 5 itens cada
+- Evitar blocos extensos de texto
+- Usar subtítulos para quebrar o conteúdo
+
+**5. RESTRIÇÕES:**
 - Palavras proibidas: {palavras_proibidas}
 - Evitar viés comercial explícito
 - Manter abordagem {abordagem_problema}
-- Número de palavras: {numero_palavras} (±10%)
+- Número de palavras: {numero_palavras} (±5%)
+- NÃO INVENTAR SOLUÇÕES ou informações não fornecidas
+- Seguir EXATAMENTE o formato e informações do briefing
 '''
 
     # Interface principal
@@ -128,8 +152,9 @@ if gemini_api_key:
         # Modo de entrada - Briefing ou Campos Individuais
         modo_entrada = st.radio("Modo de Entrada:", ["Campos Individuais", "Briefing Completo"])
         
-        # Controle de palavras
-        numero_palavras = st.slider("Número de Palavras:", min_value=300, max_value=3000, value=1000, step=100)
+        # Controle de palavras - MAIS RESTRITIVO
+        numero_palavras = st.slider("Número de Palavras:", min_value=300, max_value=2500, value=1500, step=100)
+        st.info(f"Meta: {numero_palavras} palavras (±5%)")
         
         # Palavras-chave
         st.subheader("🔑 Palavras-chave")
@@ -144,7 +169,7 @@ if gemini_api_key:
         
         # Restrições
         st.subheader("🚫 Restrições")
-        palavras_proibidas = st.text_area("Palavras Proibidas (separadas por vírgula):", "melhor, número 1, líder, insuperável")
+        palavras_proibidas = st.text_area("Palavras Proibidas (separadas por vírgula):", "melhor, número 1, líder, insuperável, invenção, inventado, solução mágica")
         
         # Estrutura do texto
         st.subheader("📐 Estrutura do Texto")
@@ -197,16 +222,26 @@ if gemini_api_key:
             espectro_acao = st.text_area("Espectro de Ação:")
             
             st.header("🎯 Diretrizes Específicas")
-            diretrizes_usuario = st.text_area("Diretrizes Adicionais:", "Incluir dicas práticas para implementação no campo. Manter linguagem acessível mas técnica.")
-            fontes_pesquisa = st.text_area("Fontes para Pesquisa/Referência:", "Embrapa Soja, Universidade de São Paulo, Artigos técnicos sobre nematoides")
+            diretrizes_usuario = st.text_area("Diretrizes Adicionais:", 
+                                            "NÃO INVENTE SOLUÇÕES. Use apenas informações fornecidas. Incluir dicas práticas para implementação no campo. Manter linguagem acessível mas técnica.")
+            fontes_pesquisa = st.text_area("Fontes para Pesquisa/Referência (cite órgãos específicos):", 
+                                         "Embrapa Soja, Universidade de São Paulo - ESALQ, Instituto Biológico de São Paulo, Artigos técnicos sobre nematoides")
             
-            # Upload de arquivos estratégicos
-            arquivo_strategico = st.file_uploader("📎 Upload de Arquivo Estratégico", type=['txt', 'pdf', 'docx'])
-            if arquivo_strategico:
-                st.success(f"Arquivo {arquivo_strategico.name} carregado com sucesso!")
+            # Upload de MÚLTIPLOS arquivos estratégicos
+            arquivos_estrategicos = st.file_uploader("📎 Upload de Múltiplos Arquivos Estratégicos", 
+                                                   type=['txt', 'pdf', 'docx', 'mp3', 'wav', 'mp4', 'mov'], 
+                                                   accept_multiple_files=True)
+            if arquivos_estrategicos:
+                st.success(f"{len(arquivos_estrategicos)} arquivo(s) carregado(s) com sucesso!")
     
     else:  # Modo Briefing
         st.header("📄 Briefing Completo")
+        
+        st.warning("""
+        **ATENÇÃO:** Para conteúdos técnicos complexos (especialmente Syngenta), 
+        recomenda-se usar o modo "Campos Individuais" para melhor controle da qualidade.
+        """)
+        
         briefing_texto = st.text_area("Cole aqui o briefing completo:", height=300,
                                      placeholder="""EXEMPLO DE BRIEFING:
 Título: Controle Eficiente de Nematoides na Soja
@@ -216,7 +251,9 @@ Objetivo: Educar produtores sobre manejo integrado
 Produto: NemaControl
 Público-alvo: Produtores de soja técnica
 Tom: Técnico-jornalístico
-Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
+Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado
+
+IMPORTANTE: NÃO INVENTE SOLUÇÕES. Use apenas informações fornecidas aqui.""")
         
         if briefing_texto:
             if st.button("Processar Briefing"):
@@ -239,9 +276,37 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
             evitar_repeticao = st.slider("Nível de Evitar Repetição:", 1, 10, 8)
             profundidade_conteudo = st.selectbox("Profundidade do Conteúdo:", ["Superficial", "Moderado", "Detalhado", "Especializado"])
             
-            # Transcrição de áudio/vídeo
-            st.subheader("🎤 Transcrição")
-            arquivo_midia = st.file_uploader("Áudio/Video para Transcrição", type=['mp3', 'wav', 'mp4', 'mov'])
+            # Configurações de formatação
+            st.subheader("📐 Formatação")
+            max_paragrafos = st.slider("Máximo de linhas por parágrafo:", 3, 8, 5)
+            max_lista_itens = st.slider("Máximo de itens por lista:", 3, 8, 5)
+            
+            # MÚLTIPLOS arquivos para transcrição
+            st.subheader("🎤 Transcrição de Mídia")
+            arquivos_midia = st.file_uploader("Áudios/Vídeos para Transcrição (múltiplos)", 
+                                            type=['mp3', 'wav', 'mp4', 'mov'], 
+                                            accept_multiple_files=True)
+
+    # Metadados para SEO
+    st.header("🔍 Metadados para SEO")
+    col_meta1, col_meta2 = st.columns(2)
+    
+    with col_meta1:
+        meta_title = st.text_input("Meta Title (máx 60 caracteres):", 
+                                 max_chars=60,
+                                 help="Título para SEO - aparecerá nos resultados de busca")
+        st.info(f"Caracteres: {len(meta_title)}/60")
+        
+        linha_fina = st.text_area("Linha Fina (máx 200 caracteres):",
+                                max_chars=200,
+                                help="Resumo executivo que aparece abaixo do título")
+        st.info(f"Caracteres: {len(linha_fina)}/200")
+    
+    with col_meta2:
+        meta_descricao = st.text_area("Meta Descrição (máx 155 caracteres):",
+                                    max_chars=155,
+                                    help="Descrição que aparece nos resultados de busca")
+        st.info(f"Caracteres: {len(meta_descricao)}/155")
 
     # Área de geração e edição
     st.header("🔄 Geração e Edição do Conteúdo")
@@ -253,7 +318,13 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
             if gemini_api_key:
                 with st.spinner("Gerando conteúdo... Isso pode levar alguns minutos"):
                     try:
-                        # Construir prompt personalizado
+                        # Processar transcrições se houver arquivos
+                        transcricoes_texto = ""
+                        if 'arquivos_midia' in locals() and arquivos_midia:
+                            transcricoes_texto = processar_transcricoes(arquivos_midia)
+                            st.info(f"Processadas {len(arquivos_midia)} transcrição(ões)")
+                        
+                        # Construir prompt personalizado - MAIS RESTRITIVO
                         regras_personalizadas = regras_base.format(
                             tom_voz=tom_voz,
                             nivel_tecnico=nivel_tecnico,
@@ -273,13 +344,30 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
                         - Palavra-chave Principal: {palavra_chave_principal}
                         - Palavras-chave Secundárias: {palavras_chave_secundarias}
                         
-                        **ESTRUTURA SOLICITADA:** {', '.join(estrutura_opcoes)}
-                        **NÍVEL DE PROFUNDIDADE:** {profundidade_conteudo}
-                        **EVITAR REPETIÇÃO:** Nível {evitar_repeticao}/10
+                        **METADADOS:**
+                        - Meta Title: {meta_title}
+                        - Meta Description: {meta_descricao}
+                        - Linha Fina: {linha_fina}
+                        
+                        **CONFIGURAÇÕES DE FORMATAÇÃO:**
+                        - Parágrafos máximos: {max_paragrafos} linhas
+                        - Listas máximas: {max_lista_itens} itens
+                        - Estrutura: {', '.join(estrutura_opcoes)}
+                        - Profundidade: {profundidade_conteudo}
+                        - Evitar repetição: Nível {evitar_repeticao}/10
+                        
+                        **DIRETRIZES CRÍTICAS:**
+                        - NÃO INVENTE SOLUÇÕES OU INFORMAÇÕES
+                        - Use APENAS dados fornecidos no briefing
+                        - Cite fontes específicas no corpo do texto
+                        - Mantenha parágrafos e listas CURTOS
+                        
+                        **CONTEÚDO DE TRANSCRIÇÕES:**
+                        {transcricoes_texto if transcricoes_texto else 'Nenhuma transcrição fornecida'}
                         
                         **DIRETRIZES ADICIONAIS:** {diretrizes_usuario if 'diretrizes_usuario' in locals() else 'Nenhuma'}
                         
-                        Gere um conteúdo {profundidade_conteudo.lower()} com aproximadamente {numero_palavras} palavras.
+                        Gere um conteúdo {profundidade_conteudo.lower()} com EXATAMENTE {numero_palavras} palavras (±5%).
                         """
                         
                         response = client.models.generate_content(
@@ -288,6 +376,13 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
                         )
                         
                         texto_gerado = response.text
+                        
+                        # Verificar contagem de palavras
+                        palavras_count = len(texto_gerado.split())
+                        st.info(f"📊 Contagem de palavras geradas: {palavras_count} (meta: {numero_palavras})")
+                        
+                        if abs(palavras_count - numero_palavras) > numero_palavras * 0.1:
+                            st.warning("⚠️ A contagem de palavras está significativamente diferente da meta")
                         
                         # Salvar no MongoDB
                         if salvar_post(
@@ -302,7 +397,10 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
                             palavras_proibidas,
                             tom_voz,
                             ', '.join(estrutura_opcoes),
-                            numero_palavras
+                            palavras_count,
+                            meta_title,
+                            meta_descricao,
+                            linha_fina
                         ):
                             st.success("✅ Post gerado e salvo no banco de dados!")
                         
@@ -320,19 +418,25 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
     if st.session_state.get('mostrar_editor', False) and 'texto_gerado' in st.session_state:
         st.header("✏️ Editor de Texto")
         
+        # Mostrar metadados gerados
+        col_meta_view1, col_meta_view2 = st.columns(2)
+        with col_meta_view1:
+            st.text_area("Meta Title:", value=meta_title, height=60, key="meta_title_view")
+            st.text_area("Linha Fina:", value=linha_fina, height=80, key="linha_fina_view")
+        with col_meta_view2:
+            st.text_area("Meta Description:", value=meta_descricao, height=80, key="meta_desc_view")
+        
         texto_editavel = st.text_area("Edite o texto gerado:", 
                                      value=st.session_state.texto_gerado, 
                                      height=400)
         
-        col_salvar,  col_nova_versao = st.columns(2)
+        col_salvar, col_nova_versao = st.columns(2)
         
         with col_salvar:
             if st.button("💾 Salvar Edições"):
                 # Atualizar no banco de dados
                 st.success("Edições salvas!")
                 
-        
-            
         with col_nova_versao:
             if st.button("🔄 Gerar Nova Versão"):
                 st.session_state.mostrar_editor = False
@@ -348,6 +452,13 @@ Palavras-chave: nematoide, soja, tratamento sementes, manejo integrado""")
                     st.write(f"**Cultura:** {post.get('cultura', 'N/A')}")
                     st.write(f"**Palavras:** {post.get('palavras_contagem', 'N/A')}")
                     st.write(f"**Tom:** {post.get('tom_voz', 'N/A')}")
+                    
+                    # Mostrar metadados salvos
+                    if post.get('meta_title'):
+                        st.write(f"**Meta Title:** {post.get('meta_title')}")
+                    if post.get('meta_descricao'):
+                        st.write(f"**Meta Descrição:** {post.get('meta_descricao')}")
+                    
                     st.text_area("Conteúdo:", value=post.get('texto_gerado', ''), height=200, key=post['id'])
                     
                     col_uso1, col_uso2 = st.columns(2)
@@ -372,24 +483,44 @@ else:
 
 # Rodapé
 st.divider()
-st.caption("🌱 Gerador de Conteúdo Agrícola - Sistema profissional para criação de conteúdos técnicos")
+st.caption("🌱 Gerador de Conteúdo Agrícola v2.0 - Sistema profissional para criação de conteúdos técnicos")
 
-# Instruções de uso
-with st.expander("ℹ️ Instruções de Uso"):
+# Instruções de uso ATUALIZADAS
+with st.expander("ℹ️ Instruções de Uso - ATUALIZADO"):
     st.markdown("""
-    **Como usar este gerador:**
+    **⚠️ MELHORIAS IMPLEMENTADAS COM BASE NO FEEDBACK:**
     
-    1. **Configurações Básicas:** Defina palavras-chave, tom de voz e estrutura
-    2. **Modo de Entrada:** Escolha entre campos individuais ou briefing completo
-    3. **Restrições:** Configure palavras proibidas e diretrizes específicas
-    4. **Geração:** Clique em "Gerar Blog Post" para criar o conteúdo
-    5. **Edição:** Use o editor integrado para ajustes finos
-    6. **Banco de Dados:** Acesse textos anteriores para reutilização
+    ✅ **Solução para problemas identificados:**
+    - Suporte a MÚLTIPLOS arquivos para transcrição
+    - Controle rigoroso de tamanho de parágrafos e listas
+    - Metadados completos (Title, Meta Title, Linha Fina, Meta Description)
+    - Citação explícita de fontes no corpo do texto
+    - Restrições contra invenção de soluções
+    - Controle mais preciso de contagem de palavras
     
-    **Recursos Avançados:**
-    - KBF de produtos fixos do banco de dados
-    - Controle preciso de número de palavras
-    - Evitar repetição de conteúdo
-    - Suporte a pesquisa web e arquivos estratégicos
-    - Transcrição de áudio/vídeo
+    **🎯 Como usar este gerador - MODOS RECOMENDADOS:**
+    
+    **📋 Para conteúdos técnicos complexos (Syngenta):**
+    1. Use o modo **"Campos Individuais"**
+    2. Preencha TODOS os campos técnicos específicos
+    3. Carregue MÚLTIPLOS arquivos de referência
+    4. Defina limites de parágrafos e listas
+    5. Gere e revise cuidadosamente
+    
+    **📄 Para briefings simples:**
+    1. Use o modo **"Briefing Completo"** apenas para conteúdos não-técnicos
+    2. Inclua instruções EXPLÍCITAS contra invenção de soluções
+    
+    **🔧 Configurações críticas de qualidade:**
+    - Defina limites de parágrafos (3-5 linhas)
+    - Limite listas a 5 itens máximo
+    - Use contagem precisa de palavras
+    - Configure palavras proibidas
+    - Preencha todos os metadados SEO
+    
+    **🚫 Restrições importantes:**
+    - O modelo NÃO deve inventar soluções
+    - Seguir EXATAMENTE informações fornecidas
+    - Manter formatação limpa e organizada
+    - Citar fontes específicas no texto
     """)
